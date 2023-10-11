@@ -2,7 +2,9 @@
 title: "TFM"
 author: "David Vergara"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  word_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -398,4 +400,40 @@ for (modelo in modelos) {
 # Resumir los resultados
 resumen <- resamples(resultados)
 summary(resumen)
+```
+
+### Entrenamiento del modelo final
+```{r echo=TRUE}
+
+library(randomForest)
+
+# Entrenamiento del modelo final
+modelo_final <- train(stroke ~ ., data = conjunto_entrenamiento, method = "rf", trControl = control)
+
+# Realiza predicciones en el conjunto de prueba
+predicciones_rf <- predict(modelo_final, conjunto_prueba)
+summary(predicciones_rf)
+
+umbral <- 0.05
+# Convierte las probabilidades en etiquetas de clase (0 o 1) usando el umbral
+predicciones_rf <- ifelse(predicciones_rf > umbral, 1, 0)
+print(predicciones_rf)
+
+# Codifica la variable objetivo "stroke" en el conjunto de prueba como factor
+conjunto_prueba$stroke <- as.factor(conjunto_prueba$stroke)
+
+# Codifica las predicciones como factor con los mismos niveles
+predicciones_rf <- as.factor(predicciones_rf)
+
+levels(predicciones_rf)
+levels(conjunto_prueba$stroke)
+
+#predicciones_rf <- factor(predicciones_rf, levels = levels(conjunto_prueba$stroke))
+#levels(predicciones_rf)
+#levels(conjunto_prueba$stroke)
+
+# Calcula la matriz de confusión y métricas de rendimiento
+matriz_confusion <- confusionMatrix(data = predicciones_rf, reference = conjunto_prueba$stroke)
+print(matriz_confusion)
+
 ```
