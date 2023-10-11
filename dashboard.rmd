@@ -1,0 +1,401 @@
+---
+title: "TFM"
+author: "David Vergara"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(tidyr)
+library(readr)
+
+library(ggplot2)
+library(tidyverse) # lo que carga por defecto ggplot2
+library(caret)
+library(ROSE)
+
+# install.packages("corrplot")
+library(corrplot)
+```
+
+## Stroke
+
+Leemos el dataset:
+
+```{r echo=TRUE}
+strokeDF <- read_csv("stroke.csv", show_col_types = FALSE)
+```
+
+### Exploracion inicial
+
+Exploramos el dataset
+
+```{r echo=TRUE}
+# Vistazo rápido a los datos
+head(strokeDF)
+
+# Veamos las dimensiones del archivo
+# 5110 filas.
+# 12 Columnas.
+dim(strokeDF)
+```
+### Resumen de los datos
+
+Resumen del dataset
+
+```{r echo=TRUE}
+summary(strokeDF)
+```
+
+### Tipos de datos por columna
+```{r echo=TRUE}
+# Tipo de dato por columna:
+glimpse(strokeDF$smoking_status)
+
+# Dominio de datos en las columnas:
+#str(strokeDF)
+```
+
+### Limpieza de los datos
+Ahora hagamos un poco de limpieza en los datos
+```{r echo=TRUE}
+# Verificacion de valores 1 y 0
+filter(strokeDF, hypertension > 1 | hypertension < 0) # valores de stroke diferentes a 1 o 0
+
+filter(strokeDF, heart_disease > 1 | heart_disease < 0) # valores de stroke diferentes a 1 o 0
+
+filter(strokeDF, stroke > 1 | stroke < 0) # valores de stroke diferentes a 1 o 0
+
+# Podríamos remover algunos registro del conjunto de datos, como por ejemplo los registros de edad menor a 18 años, para estar tranquilos de la legalidad del análisis.
+#strokeDF <- filter(strokeDF, age > 18) # Edad menor a 18
+
+# Reemplazar "N/A" con NA en la columna
+strokeDF$gender <- gsub("N/A", NA, strokeDF$gender)
+strokeDF$ever_married <- gsub("N/A", NA, strokeDF$ever_married)
+strokeDF$work_type <- gsub("N/A", NA, strokeDF$work_type)
+strokeDF$smoking_status <- gsub("N/A", NA, strokeDF$smoking_status)
+
+strokeDF$age <- gsub("N/A", NA, strokeDF$age)
+strokeDF$age <- as.numeric(strokeDF$age)
+
+strokeDF$bmi <- gsub("N/A", NA, strokeDF$bmi)
+strokeDF$bmi <- as.numeric(strokeDF$bmi)
+# Reemplazar N/A por 0
+strokeDF$bmi <- ifelse(is.na(strokeDF$bmi), 0, strokeDF$bmi)
+
+# Reemplazamos los valores categoricos de gender "Male" y "Female" a 1 y 0
+strokeDF$gender <- ifelse(strokeDF$gender == "Male", 0, 1)
+
+# Reemplazamos los valores categoricos de gender "Yes" y "No" a 1 y 0
+strokeDF$ever_married <- ifelse(strokeDF$ever_married == "Yes", 1, 0)
+
+# Reemplazamos los valores categoricos de smoking status
+# Utilizar un vector de reemplazo y match para asignar valores numéricos
+etiquetas <- c("formerly smoked", "never smoked", "smokes", "Unknown")
+valores_numericos <- c(1, 0, 2, 3)
+strokeDF$smoking_statusNum <- valores_numericos[match(strokeDF$smoking_status, etiquetas)]
+
+# Reemplazamos los valores categoricos de work type
+etiquetas <- c("Private", "Self-employed", "Govt_job", "children", "Never_worked")
+valores_numericos <- c(1, 0, 2, 3, 4)
+strokeDF$work_typeNum <- valores_numericos[match(strokeDF$work_type, etiquetas)]
+
+# Reemplazamos los valores categoricos de Residence type
+strokeDF$Residence_typeNum <- ifelse(strokeDF$Residence_type == "Urban", 1, 0)
+
+which(is.na(strokeDF$gender))
+which(is.na(strokeDF$age))
+which(is.na(strokeDF$hypertension))
+which(is.na(strokeDF$heart_disease))
+which(is.na(strokeDF$ever_married))
+which(is.na(strokeDF$work_type))
+which(is.na(strokeDF$work_typeNum))
+which(is.na(strokeDF$Residence_type))
+which(is.na(strokeDF$Residence_typeNum))
+which(is.na(strokeDF$avg_glucose_level))
+which(is.na(strokeDF$bmi))
+which(is.na(strokeDF$smoking_status))
+which(is.na(strokeDF$stroke))
+```
+Podemos ver que para el análisis de BMI debemos remover los valores NA.
+
+
+# Análisis de Correlación.
+
+```{r echo=TRUE}
+
+# Seleccionar variables para el análisis de correlación
+variables_numericas <- strokeDF[c("gender","age", "hypertension", "heart_disease", "ever_married", "work_typeNum", "Residence_typeNum", "avg_glucose_level", "bmi", "smoking_statusNum" ,"stroke")]
+
+# Calcular la matriz de correlación
+matriz_correlacion <- cor(variables_numericas, use = "complete.obs")
+
+# Crear un mapa de calor de la matriz de correlación
+corrplot(matriz_correlacion, method = "color")
+
+```
+Con este gráfico podemos evidenciar que las variables a estudiar son:
+- age
+- hypertension
+- heart_disease
+- avg_glucose_level
+
+Empezamos a buscar relaciones, podemos hacer uso de tablas de contingencia y pruebas Chi-cuadrado.
+
+## Edad
+
+Iniciaremos usando la edad:
+
+```{r echo=TRUE}
+# Crear una tabla de contingencia entre las variables "Edad" y "Stroke"
+tabla_contingencia <- table(strokeDF$age, strokeDF$stroke)
+
+# Mostrar la tabla de contingencia
+#print(tabla_contingencia)
+
+# Crear un gráfico de barras apilado
+ggplot(data = as.data.frame(tabla_contingencia), aes(x = Var1, y = Freq, fill = Var2)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Edad", y = "Frecuencia", fill = "Strokes") +
+  theme_minimal()
+
+# Crear un gráfico de mosaico
+mosaicplot(tabla_contingencia, main = "Tabla de Contingencia")
+
+# Realizar una prueba chi-cuadrado
+resultado_chi_cuadrado <- chisq.test(tabla_contingencia)
+
+# Mostrar los resultados
+print(resultado_chi_cuadrado)
+```
+Podemos ver que hay una incidencia mayor en edades mayores.
+En este ejemplo, el valor p es (p-value < 2.2e-16), que es menor que 0.05, por lo que podrías concluir que existe una asociación significativa entre las dos variables categóricas.
+
+Analicemos ahora otras variables:
+
+## heart_disease
+```{r echo=TRUE}
+# Crear una tabla de contingencia entre las variables "Edad" y "Stroke"
+tabla_contingencia <- table(strokeDF$heart_disease, strokeDF$stroke)
+
+# Mostrar la tabla de contingencia
+print(tabla_contingencia)
+
+# Crear un gráfico de barras apilado
+ggplot(data = as.data.frame(tabla_contingencia), aes(x = Var1, y = Freq, fill = Var2)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Padece enfermedad cardiaca", y = "Frecuencia", fill = "Strokes") +
+  theme_minimal()
+
+# Crear un gráfico de mosaico
+mosaicplot(tabla_contingencia, main = "Tabla de Contingencia")
+
+# Realizar una prueba chi-cuadrado
+resultado_chi_cuadrado <- chisq.test(tabla_contingencia)
+
+# Mostrar los resultados
+print(resultado_chi_cuadrado)
+```
+
+
+## Hipertensión
+```{r echo=TRUE}
+# Crear una tabla de contingencia entre las variables "Edad" y "Stroke"
+tabla_contingencia <- table(strokeDF$hypertension, strokeDF$stroke)
+
+# Mostrar la tabla de contingencia
+print(tabla_contingencia)
+
+# Crear un gráfico de barras apilado
+ggplot(data = as.data.frame(tabla_contingencia), aes(x = Var1, y = Freq, fill = Var2)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Padece hipertensión", y = "Frecuencia", fill = "Strokes") +
+  theme_minimal()
+
+# Crear un gráfico de mosaico
+mosaicplot(tabla_contingencia, main = "Tabla de Contingencia")
+
+# Realizar una prueba chi-cuadrado
+resultado_chi_cuadrado <- chisq.test(tabla_contingencia)
+
+# Mostrar los resultados
+print(resultado_chi_cuadrado)
+```
+## Prueba de Hipotesis 1
+
+###	Hipótesis 1: "Existe una relación entre la edad (age) y el riesgo de accidente cerebrovascular."
+o	Hipótesis nula (H0): No hay diferencia significativa en el riesgo de accidente cerebrovascular entre diferentes grupos de edad.
+o	Hipótesis alternativa (H1): La edad está asociada con un mayor riesgo de accidente cerebrovascular.
+
+### Prueba de distribución normal
+```{r echo=TRUE}
+# Crear dos grupos basados en la presencia o ausencia de accidente cerebrovascular
+grupo_1 <- strokeDF$age[strokeDF$stroke == 1]
+grupo_2 <- strokeDF$age[strokeDF$stroke == 0]
+
+# Crear histograma para los grupos
+hist(grupo_1, main = "Histograma para grupo_1")
+
+hist(grupo_2, main = "Histograma para grupo_2")
+
+# Realizar la prueba t para comparar las edades
+resultado_prueba <- t.test(grupo_1, grupo_2)
+
+# Mostrar los resultados de la prueba
+print(resultado_prueba)
+
+if (resultado_prueba$p.value < 0.05) {
+  print("Se rechaza la hipótesis nula, Esto significa que la probabilidad de obtener los resultados observados si no hubiera diferencia en las edades entre las personas con y sin accidente cerebrovascular es esencialmente nula.");
+} else {
+  print("No hay evidencia de una diferencia significativa.");
+}
+```
+## Prueba de Hipotesis 2
+
+### Hipótesis 2: La hipertensión (hypertension) aumenta el riesgo de accidente cerebrovascular.
+
+o	Hipótesis nula (H0): No hay diferencia significativa en el riesgo de accidente cerebrovascular entre las personas con y sin hipertensión.
+o	Hipótesis alternativa (H1): Las personas con hipertensión tienen un mayor riesgo de accidente cerebrovascular.
+
+```{r echo=TRUE}
+# Crear una tabla de contingencia entre hipertensión y accidente cerebrovascular
+tabla_contingencia <- table(strokeDF$hypertension, strokeDF$stroke)
+
+# Realizar la prueba de chi-cuadrado
+resultado_prueba <- chisq.test(tabla_contingencia)
+
+# Mostrar los resultados de la prueba
+print(resultado_prueba)
+
+if (resultado_prueba$p.value < 0.05) {
+  print("Hay una asociación significativa entre la hipertensión y la ocurrencia de accidentes cerebrovasculares.");
+} else {
+  print("No hay evidencia de una asociación significativa.");
+}
+```
+## Prueba de Hipotesis 3
+
+###	Hipótesis 3: La enfermedad cardíaca (heart_disease) se asocia con un mayor riesgo de accidente cerebrovascular.
+
+o	Hipótesis nula (H0): No hay diferencia significativa en el riesgo de accidente cerebrovascular entre las personas con y sin enfermedad cardíaca.
+o	Hipótesis alternativa (H1): Las personas con enfermedad cardíaca tienen un mayor riesgo de accidente cerebrovascular.
+
+```{r echo=TRUE}
+# Crear una tabla de contingencia entre enfermedad cardíaca y accidente cerebrovascular
+tabla_contingencia <- table(strokeDF$heart_disease, strokeDF$stroke)
+
+# Realizar la prueba de chi-cuadrado
+resultado_prueba <- chisq.test(tabla_contingencia)
+
+# Mostrar los resultados de la prueba
+print(resultado_prueba)
+
+if (resultado_prueba$p.value < 0.05) {
+  print("hay una asociación significativa entre la enfermedad cardíaca y la ocurrencia de accidentes cerebrovasculares.");
+} else {
+  print("No hay evidencia de una asociación significativa.");
+}
+```
+###	Hipótesis 4: El nivel promedio de glucosa en sangre (avg_glucose_level) está relacionado con el riesgo de accidente cerebrovascular.
+o	Hipótesis nula (H0): No hay diferencia significativa en el riesgo de accidente cerebrovascular entre las personas con diferentes niveles promedio de glucosa en sangre.
+o	Hipótesis alternativa (H1): Los niveles promedio de glucosa en sangre están asociados con un mayor riesgo de accidente cerebrovascular.
+
+### Prueba de distribución normal
+```{r echo=TRUE}
+
+# Crear dos grupos basados en la presencia o ausencia de accidente cerebrovascular
+grupo_1 <- strokeDF$avg_glucose_level[strokeDF$stroke == 1]
+grupo_2 <- strokeDF$avg_glucose_level[strokeDF$stroke == 0]
+
+# Crear histograma para grupo_1
+hist(grupo_1, main = "Histograma para grupo_1")
+
+hist(grupo_2, main = "Histograma para grupo_2")
+
+# Prueba de normalidad para grupo_1
+shapiro.test(grupo_1)
+
+# Prueba de normalidad para grupo_2
+shapiro.test(grupo_2)
+```
+
+### Prueba de distribución normal
+```{r echo=TRUE}
+
+# Crear dos grupos basados en la presencia o ausencia de accidente cerebrovascular
+grupo_1 <- strokeDF$avg_glucose_level[strokeDF$stroke == 1]
+grupo_2 <- strokeDF$avg_glucose_level[strokeDF$stroke == 0]
+
+# Crear histograma para grupo_1
+hist(grupo_1, main = "Histograma para grupo_1")
+
+hist(grupo_2, main = "Histograma para grupo_2")
+
+# Prueba de normalidad para grupo_1
+shapiro.test(grupo_1)
+
+# Prueba de normalidad para grupo_2
+shapiro.test(grupo_2)
+```
+## Prueba no paramétrica
+```{r echo=TRUE}
+# Aplicar la prueba de Mann-Whitney U
+resultado_prueba <- wilcox.test(grupo_1, grupo_2)
+
+# Mostrar los resultados de la prueba
+print(resultado_prueba)
+
+if (resultado_prueba$p.value < 0.05) {
+  print("Podemos rechazar la hipótesis nula. Esto significa que hay una diferencia significativa en el nivel promedio de glucosa en sangre entre las personas con y sin accidente cerebrovascular. Un valor p pequeño sugiere que los grupos son diferentes en términos de nivel de glucosa en sangre.");
+} else {
+  print("No hay evidencia suficiente para rechazar la hipótesis nula, lo que sugiere que no hay una diferencia significativa en el nivel promedio de glucosa en sangre entre los dos grupos.");
+}
+```
+# Modelos predictivos
+
+```{r echo=TRUE}
+
+# Establece una semilla para la reproducibilidad
+set.seed(123)
+
+# Proporción para la división (por ejemplo, 70% de entrenamiento y 30% de prueba)
+proporcion_entrenamiento <- 0.7
+
+# índices aleatorios para dividir los datos
+indices <- sample(1:nrow(strokeDF), nrow(strokeDF))
+
+# Calcula la cantidad de filas para el conjunto de entrenamiento
+n_entrenamiento <- round(proporcion_entrenamiento * nrow(strokeDF))
+
+# Divide los datos en conjuntos de entrenamiento y prueba
+conjunto_entrenamiento <- strokeDF[indices[1:n_entrenamiento], ]
+conjunto_prueba <- strokeDF[indices[(n_entrenamiento + 1):nrow(strokeDF)], ]
+
+```
+
+Ahora con los conjuntos de prueba y entrenamiento haremos la prueba de los modelos
+
+```{r echo=TRUE}
+
+# Definir un objeto de control para la validación cruzada
+control <- trainControl(method = "cv", number = 10, classProbs = TRUE)
+
+# Definir una lista de modelos a comparar
+modelos <- c("glm", "rpart", "rf")
+
+# Crear una lista para almacenar los resultados de cada modelo
+resultados <- list()
+
+# Realizar la comparación de modelos
+for (modelo in modelos) {
+  resultado <- train(stroke ~ ., data = conjunto_entrenamiento, method = modelo, trControl = control)
+  resultados[[modelo]] <- resultado
+}
+
+# Resumir los resultados
+resumen <- resamples(resultados)
+summary(resumen)
+```
